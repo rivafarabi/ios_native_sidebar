@@ -69,6 +69,7 @@ public class IosNativeSidebarPlugin: NSObject, FlutterPlugin, FlutterStreamHandl
 
         let style: SidebarStyle = styleStr == "splitView" ? .splitView : .sidebarAdaptable
         let title = args["title"] as? String
+        let largeTitleDisplayMode = args["largeTitleDisplayMode"] as? Bool ?? true
         let items = itemsData.compactMap { SidebarItemModel(dict: $0) }
 
         DispatchQueue.main.async { [weak self] in
@@ -84,6 +85,7 @@ public class IosNativeSidebarPlugin: NSObject, FlutterPlugin, FlutterStreamHandl
             let container = SidebarContainerViewController(
                 style: style,
                 title: title,
+                largeTitleDisplayMode: largeTitleDisplayMode,
                 items: items,
                 contentViewController: window.rootViewController!,
                 onEvent: { [weak self] event in
@@ -92,12 +94,13 @@ public class IosNativeSidebarPlugin: NSObject, FlutterPlugin, FlutterStreamHandl
             )
             self.sidebarContainer = container
 
-            UIView.transition(
-                with: window,
-                duration: 0.3,
-                options: .transitionCrossDissolve,
-                animations: { window.rootViewController = container }
-            )
+            // Swap the root VC directly — no animation, no pre-load.
+            // UIKit loads and lays out the container synchronously within the
+            // current run-loop cycle before the next frame is composited, so
+            // Flutter content appears immediately with no blank-frame gap.
+            // Pre-loading container.view before this swap would detach the
+            // Flutter view from the live window hierarchy and cause a crash.
+            window.rootViewController = container
 
             self.eventSink?(["type": "initialized"])
             result(nil)

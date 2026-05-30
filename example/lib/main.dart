@@ -37,6 +37,8 @@ class _SidebarDemoPageState extends State<SidebarDemoPage> {
   @override
   Widget build(BuildContext context) {
     return NativeSidebar(
+      title: "Sidebar",
+      largeTitleDisplayMode: true,
       style: NativeSidebarStyle.sidebarAdaptable,
       items: _items,
       selectedItemId: _selectedId,
@@ -68,8 +70,10 @@ class _DetailContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print(MediaQuery.of(context).padding);
+
     return Scaffold(
-      appBar: AppBar(title: Text(_titleFor(selectedId))),
+      appBar: AppBar(title: Text(_titleFor(selectedId)), backgroundColor: Colors.blueAccent),
       body: AnimatedPadding(
         duration: const Duration(milliseconds: 200),
         padding: EdgeInsets.only(left: MediaQuery.of(context).padding.left),

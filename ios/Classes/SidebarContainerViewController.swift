@@ -1,9 +1,13 @@
 import UIKit
 
+// MARK: - SidebarStyle
+
 enum SidebarStyle {
     case sidebarAdaptable
     case splitView
 }
+
+// MARK: - SidebarContainerViewController
 
 class SidebarContainerViewController: UISplitViewController {
 
@@ -12,11 +16,15 @@ class SidebarContainerViewController: UISplitViewController {
     private let contentViewController: UIViewController
     private let onEvent: ([String: Any]) -> Void
 
+    // Prevents stacking multiple pending fixContentSafeArea dispatches.
+    private var pendingSafeAreaFix = false
+
     // MARK: - Init
 
     init(
         style: SidebarStyle,
         title: String?,
+        largeTitleDisplayMode: Bool,
         items: [SidebarItemModel],
         contentViewController: UIViewController,
         onEvent: @escaping ([String: Any]) -> Void
@@ -24,10 +32,17 @@ class SidebarContainerViewController: UISplitViewController {
         self.sidebarStyle = style
         self.contentViewController = contentViewController
         self.onEvent = onEvent
-        self.primaryVC = SidebarPrimaryViewController(title: title, items: items)
+
+        let primary = SidebarPrimaryViewController(
+            title: title,
+            largeTitleDisplayMode: largeTitleDisplayMode,
+            items: items
+        )
+        self.primaryVC = primary
+
         super.init(style: .doubleColumn)
 
-        primaryVC.onItemSelected = { [weak self] item in
+        primary.onItemSelected = { [weak self] item in
             self?.handleItemSelected(item)
         }
     }
@@ -42,32 +57,68 @@ class SidebarContainerViewController: UISplitViewController {
         configureSplitView()
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // viewDidAppear fires after the first complete layout pass with the
+        // view fully embedded in the window. Safe area values are current here.
+        fixContentSafeArea()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // Defer to the next run-loop turn so the content VC's view has had a
+        // chance to propagate the post-layout safe-area values. Reading
+        // contentViewController.view.safeAreaInsets synchronously here returns
+        // a stale value because UIKit updates child views asynchronously.
+        guard !pendingSafeAreaFix else { return }
+        pendingSafeAreaFix = true
+        DispatchQueue.main.async { [weak self] in
+            self?.pendingSafeAreaFix = false
+            self?.fixContentSafeArea()
+        }
+    }
+
+    override func viewWillTransition(
+        to size: CGSize,
+        with coordinator: UIViewControllerTransitionCoordinator
+    ) {
+        super.viewWillTransition(to: size, with: coordinator)
+        // Run after the transition animation so safe areas reflect the new
+        // window size (handles Stage Manager windowed ↔ fullscreen changes).
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.fixContentSafeArea()
+        }
+    }
+
+    // MARK: - Safe Area Correction
+
+    /// Cancels the extra top safe-area that UISplitViewController adds to the
+    /// secondary column to align it with the primary column's navigation bar.
+    ///
+    /// Flutter manages its own AppBar / status-bar padding, so any inset beyond
+    /// the window's true top safe area (status bar / notch) inflates
+    /// MediaQuery.padding.top. We cancel the excess by applying an equal
+    /// negative additionalSafeAreaInsets.top to the content view controller.
+    private func fixContentSafeArea() {
+        guard let window = view.window else { return }
+        let windowTop = window.safeAreaInsets.top
+        let contentTop = contentViewController.view.safeAreaInsets.top
+        guard contentTop > windowTop else { return }
+        contentViewController.additionalSafeAreaInsets.top -= (contentTop - windowTop)
+    }
+
     // MARK: - Configuration
 
     private func configureSplitView() {
         delegate = self
 
-        // Primary column: native sidebar
         setViewController(primaryVC, for: .primary)
-
-        // Secondary column: existing Flutter view controller (becomes the content pane)
         setViewController(contentViewController, for: .secondary)
 
-        switch sidebarStyle {
-        case .sidebarAdaptable:
-            // Sidebar is beside content on iPad; on iPhone it overlays as a sheet
-            preferredDisplayMode = .oneBesideSecondary
-            preferredSplitBehavior = .tile
-            presentsWithGesture = true
+        preferredDisplayMode = .oneBesideSecondary
+        preferredSplitBehavior = .tile
+        presentsWithGesture = true
 
-        case .splitView:
-            // Always show sidebar beside content on iPad
-            preferredDisplayMode = .oneBesideSecondary
-            preferredSplitBehavior = .tile
-            presentsWithGesture = true
-        }
-
-        // Sidebar column width
         preferredPrimaryColumnWidthFraction = 0.28
         minimumPrimaryColumnWidth = 240
         maximumPrimaryColumnWidth = 320
@@ -76,7 +127,6 @@ class SidebarContainerViewController: UISplitViewController {
     // MARK: - Item Selection
 
     private func handleItemSelected(_ item: SidebarItemModel) {
-        // On compact (iPhone), show the secondary column by revealing it
         show(.secondary)
         onEvent(["type": "itemSelected", "itemId": item.id])
     }
@@ -92,13 +142,8 @@ class SidebarContainerViewController: UISplitViewController {
     }
 
     func setSidebarVisible(_ visible: Bool) {
-        if visible {
-            preferredDisplayMode = .oneBesideSecondary
-        } else {
-            preferredDisplayMode = .secondaryOnly
-        }
-        let isVisible = preferredDisplayMode != .secondaryOnly
-        onEvent(["type": "sidebarVisibilityChanged", "isVisible": isVisible])
+        preferredDisplayMode = visible ? .oneBesideSecondary : .secondaryOnly
+        onEvent(["type": "sidebarVisibilityChanged", "isVisible": visible])
     }
 }
 
@@ -107,12 +152,10 @@ class SidebarContainerViewController: UISplitViewController {
 extension SidebarContainerViewController: UISplitViewControllerDelegate {
 
     func splitViewControllerDidCollapse(_ svc: UISplitViewController) {
-        // Collapsed → compact (iPhone): user sees sidebar (primary) first
         onEvent(["type": "sidebarVisibilityChanged", "isVisible": true])
     }
 
     func splitViewControllerDidExpand(_ svc: UISplitViewController) {
-        // Expanded → regular (iPad): sidebar visibility depends on display mode
         let isVisible = displayMode != .secondaryOnly
         onEvent(["type": "sidebarVisibilityChanged", "isVisible": isVisible])
     }
@@ -122,8 +165,6 @@ extension SidebarContainerViewController: UISplitViewControllerDelegate {
         collapseSecondary secondaryVC: UIViewController,
         onto primaryVC: UIViewController
     ) -> Bool {
-        // Return true so that on iPhone (splitView) the sidebar (primary) is shown first
-        // rather than jumping straight into the detail content
         return sidebarStyle == .splitView
     }
 }

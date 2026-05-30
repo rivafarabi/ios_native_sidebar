@@ -8,10 +8,7 @@ import 'native_sidebar_item.dart';
 import 'native_sidebar_state.dart';
 import 'native_sidebar_style.dart';
 
-typedef NativeSidebarBuilder = Widget Function(
-  BuildContext context,
-  NativeSidebarState state,
-);
+typedef NativeSidebarBuilder = Widget Function(BuildContext context, NativeSidebarState state);
 
 /// A widget that renders a native iPadOS/iOS sidebar using
 /// [UISplitViewController] with iOS 26 liquid glass aesthetics.
@@ -28,6 +25,10 @@ class NativeSidebar extends StatefulWidget {
 
   /// Optional title displayed in the sidebar's navigation bar.
   final String? title;
+
+  /// Whether the sidebar title renders as an iOS large title.
+  /// Defaults to `true`, matching the standard iPadOS sidebar appearance.
+  final bool largeTitleDisplayMode;
 
   /// Items to display in the sidebar list.
   final List<NativeSidebarItem> items;
@@ -49,6 +50,7 @@ class NativeSidebar extends StatefulWidget {
     required this.items,
     required this.builder,
     this.title,
+    this.largeTitleDisplayMode = true,
     this.selectedItemId,
     this.onItemSelected,
   });
@@ -82,8 +84,7 @@ class _NativeSidebarState extends State<NativeSidebar> {
     if (_itemsChanged(old.items, widget.items)) {
       _updateItems();
     }
-    if (widget.selectedItemId != old.selectedItemId &&
-        widget.selectedItemId != null) {
+    if (widget.selectedItemId != old.selectedItemId && widget.selectedItemId != null) {
       _channel.invokeMethod('selectItem', {'itemId': widget.selectedItemId});
     }
   }
@@ -104,7 +105,9 @@ class _NativeSidebarState extends State<NativeSidebar> {
   }
 
   void _handleEvent(dynamic raw) {
-    if (raw is! Map) { return; }
+    if (raw is! Map) {
+      return;
+    }
     final event = Map<String, dynamic>.from(raw);
     final type = event['type'] as String?;
     switch (type) {
@@ -113,10 +116,7 @@ class _NativeSidebarState extends State<NativeSidebar> {
       case 'itemSelected':
         final id = event['itemId'] as String?;
         if (id == null) break;
-        final item = widget.items.firstWhere(
-          (i) => i.id == id,
-          orElse: () => NativeSidebarItem(id: id, title: id),
-        );
+        final item = widget.items.firstWhere((i) => i.id == id, orElse: () => NativeSidebarItem(id: id, title: id));
         setState(() => _state = _state.copyWith(selectedItemId: id));
         widget.onItemSelected?.call(item);
       case 'sidebarVisibilityChanged':
@@ -131,10 +131,10 @@ class _NativeSidebarState extends State<NativeSidebar> {
       'style': widget.style.name,
       'items': itemMaps,
       if (widget.title != null) 'title': widget.title,
+      'largeTitleDisplayMode': widget.largeTitleDisplayMode,
     });
     if (widget.selectedItemId != null) {
-      await _channel.invokeMethod(
-          'selectItem', {'itemId': widget.selectedItemId});
+      await _channel.invokeMethod('selectItem', {'itemId': widget.selectedItemId});
     }
   }
 
@@ -143,14 +143,10 @@ class _NativeSidebarState extends State<NativeSidebar> {
     await _channel.invokeMethod('updateItems', {'items': itemMaps});
   }
 
-  bool _itemsChanged(
-      List<NativeSidebarItem> a, List<NativeSidebarItem> b) {
+  bool _itemsChanged(List<NativeSidebarItem> a, List<NativeSidebarItem> b) {
     if (a.length != b.length) return true;
     for (var i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id ||
-          a[i].title != b[i].title ||
-          a[i].systemImage != b[i].systemImage ||
-          a[i].badge != b[i].badge) return true;
+      if (a[i].id != b[i].id || a[i].title != b[i].title || a[i].systemImage != b[i].systemImage || a[i].badge != b[i].badge) return true;
     }
     return false;
   }
@@ -199,8 +195,7 @@ class _FlutterSidebarFallback extends StatefulWidget {
   });
 
   @override
-  State<_FlutterSidebarFallback> createState() =>
-      _FlutterSidebarFallbackState();
+  State<_FlutterSidebarFallback> createState() => _FlutterSidebarFallbackState();
 }
 
 class _FlutterSidebarFallbackState extends State<_FlutterSidebarFallback> {
@@ -216,8 +211,7 @@ class _FlutterSidebarFallbackState extends State<_FlutterSidebarFallback> {
   }
 
   Widget _buildRailLayout(BuildContext context) {
-    final selectedIndex = widget.items
-        .indexWhere((i) => i.id == widget.selectedItemId);
+    final selectedIndex = widget.items.indexWhere((i) => i.id == widget.selectedItemId);
 
     return Scaffold(
       body: Row(
@@ -225,19 +219,17 @@ class _FlutterSidebarFallbackState extends State<_FlutterSidebarFallback> {
           NavigationRail(
             selectedIndex: selectedIndex < 0 ? 0 : selectedIndex,
             extended: true,
-            onDestinationSelected: (idx) =>
-                widget.onItemSelected(widget.items[idx]),
-            destinations: widget.items.map((item) {
-              return NavigationRailDestination(
-                icon: item.systemImage != null
-                    ? Icon(IconData(
-                        _sfSymbolToMaterialCode(item.systemImage!),
-                        fontFamily: 'MaterialIcons',
-                      ))
-                    : const Icon(Icons.circle_outlined),
-                label: Text(item.title),
-              );
-            }).toList(),
+            onDestinationSelected: (idx) => widget.onItemSelected(widget.items[idx]),
+            destinations:
+                widget.items.map((item) {
+                  return NavigationRailDestination(
+                    icon:
+                        item.systemImage != null
+                            ? Icon(IconData(_sfSymbolToMaterialCode(item.systemImage!), fontFamily: 'MaterialIcons'))
+                            : const Icon(Icons.circle_outlined),
+                    label: Text(item.title),
+                  );
+                }).toList(),
           ),
           const VerticalDivider(width: 1),
           Expanded(child: widget.builder(context, widget.state)),
@@ -253,12 +245,8 @@ class _FlutterSidebarFallbackState extends State<_FlutterSidebarFallback> {
       return Navigator(
         onGenerateRoute: (settings) {
           return MaterialPageRoute(
-            builder: (_) => _SidebarListPage(
-              items: widget.items,
-              onItemSelected: widget.onItemSelected,
-              builder: widget.builder,
-              state: widget.state,
-            ),
+            builder:
+                (_) => _SidebarListPage(items: widget.items, onItemSelected: widget.onItemSelected, builder: widget.builder, state: widget.state),
           );
         },
       );
@@ -268,19 +256,18 @@ class _FlutterSidebarFallbackState extends State<_FlutterSidebarFallback> {
     return Scaffold(
       drawer: Drawer(
         child: ListView(
-          children: widget.items.map((item) {
-            return ListTile(
-              leading: item.systemImage != null
-                  ? const Icon(Icons.circle)
-                  : null,
-              title: Text(item.title),
-              selected: item.id == widget.selectedItemId,
-              onTap: () {
-                Navigator.of(context).pop();
-                widget.onItemSelected(item);
-              },
-            );
-          }).toList(),
+          children:
+              widget.items.map((item) {
+                return ListTile(
+                  leading: item.systemImage != null ? const Icon(Icons.circle) : null,
+                  title: Text(item.title),
+                  selected: item.id == widget.selectedItemId,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    widget.onItemSelected(item);
+                  },
+                );
+              }).toList(),
         ),
       ),
       body: widget.builder(context, widget.state),
@@ -311,12 +298,7 @@ class _SidebarListPage extends StatefulWidget {
   final NativeSidebarBuilder builder;
   final NativeSidebarState state;
 
-  const _SidebarListPage({
-    required this.items,
-    required this.onItemSelected,
-    required this.builder,
-    required this.state,
-  });
+  const _SidebarListPage({required this.items, required this.onItemSelected, required this.builder, required this.state});
 
   @override
   State<_SidebarListPage> createState() => _SidebarListPageState();
@@ -330,29 +312,20 @@ class _SidebarListPageState extends State<_SidebarListPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Menu')),
       body: ListView(
-        children: widget.items.map((item) {
-          return ListTile(
-            title: Text(item.title),
-            selected: item.id == _state.selectedItemId,
-            onTap: () {
-              widget.onItemSelected(item);
-              setState(() {
-                _state = NativeSidebarState(
-                  isSidebarVisible: false,
-                  selectedItemId: item.id,
-                );
-              });
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (ctx) => Scaffold(
-                    appBar: AppBar(),
-                    body: widget.builder(ctx, _state),
-                  ),
-                ),
+        children:
+            widget.items.map((item) {
+              return ListTile(
+                title: Text(item.title),
+                selected: item.id == _state.selectedItemId,
+                onTap: () {
+                  widget.onItemSelected(item);
+                  setState(() {
+                    _state = NativeSidebarState(isSidebarVisible: false, selectedItemId: item.id);
+                  });
+                  Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => Scaffold(appBar: AppBar(), body: widget.builder(ctx, _state))));
+                },
               );
-            },
-          );
-        }).toList(),
+            }).toList(),
       ),
     );
   }

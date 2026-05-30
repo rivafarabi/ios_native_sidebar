@@ -1,20 +1,30 @@
 import UIKit
 
-class SidebarPrimaryViewController: UIViewController {
+class SidebarPrimaryViewController: UICollectionViewController {
 
     var onItemSelected: ((SidebarItemModel) -> Void)?
 
     private var items: [SidebarItemModel]
-    private var collectionView: UICollectionView!
     private var dataSource: UICollectionViewDiffableDataSource<Int, SidebarItemModel>!
     private var selectedItemId: String?
 
     // MARK: - Init
 
-    init(title: String?, items: [SidebarItemModel]) {
+    init(title: String?, largeTitleDisplayMode: Bool, items: [SidebarItemModel]) {
         self.items = items
-        super.init(nibName: nil, bundle: nil)
+
+        var listConfig = UICollectionLayoutListConfiguration(appearance: .sidebar)
+        listConfig.showsSeparators = false
+        listConfig.backgroundColor = .clear
+        let layout = UICollectionViewCompositionalLayout.list(using: listConfig)
+
+        super.init(collectionViewLayout: layout)
         self.title = title
+        // .automatic: large title at rest, collapses to inline on scroll.
+        // .never: inline title always.
+        // The split view's internal column nav controller honours this without
+        // needing an explicit UINavigationController wrapper.
+        navigationItem.largeTitleDisplayMode = largeTitleDisplayMode ? .automatic : .never
     }
 
     @available(*, unavailable)
@@ -24,44 +34,32 @@ class SidebarPrimaryViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
+        // Using UICollectionViewController means collectionView.view IS the scroll view,
+        // so the navigation bar can observe content offset for large-title collapsing.
+        collectionView.backgroundColor = .clear
         setupGlassBackground()
-        setupCollectionView()
+        setupDataSource()
         applySnapshot(animated: false)
     }
 
     // MARK: - Glass Background
 
     private func setupGlassBackground() {
+        // Set as backgroundView so it sits behind all cells and participates
+        // in the scroll view's own layout (no frame management needed).
         let effectView: UIVisualEffectView
         if #available(iOS 26.0, *) {
-            // Native liquid glass effect introduced in iOS 26
             let glass = UIGlassEffect()
             effectView = UIVisualEffectView(effect: glass)
         } else {
             effectView = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
         }
-        effectView.frame = view.bounds
-        effectView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        view.insertSubview(effectView, at: 0)
+        collectionView.backgroundView = effectView
     }
 
-    // MARK: - Collection View Setup
+    // MARK: - Data Source
 
-    private func setupCollectionView() {
-        // .sidebar appearance gives the native iPadOS sidebar look
-        var listConfig = UICollectionLayoutListConfiguration(appearance: .sidebar)
-        listConfig.showsSeparators = false
-        listConfig.backgroundColor = .clear
-
-        let layout = UICollectionViewCompositionalLayout.list(using: listConfig)
-
-        collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: layout)
-        collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        collectionView.backgroundColor = .clear
-        collectionView.delegate = self
-        view.addSubview(collectionView)
-
+    private func setupDataSource() {
         let cellReg = UICollectionView.CellRegistration<UICollectionViewListCell, SidebarItemModel> {
             [weak self] cell, _, item in
             self?.configure(cell: cell, for: item)
@@ -86,22 +84,18 @@ class SidebarPrimaryViewController: UIViewController {
 
         cell.contentConfiguration = content
 
-        // Badge
         if let badge = item.badge, !badge.isEmpty {
-            var accessories: [UICellAccessory] = []
             let label = UILabel()
             label.text = badge
             label.font = .systemFont(ofSize: 12, weight: .semibold)
             label.textColor = .secondaryLabel
-            accessories.append(.customView(
+            cell.accessories = [.customView(
                 configuration: .init(customView: label, placement: .trailing())
-            ))
-            cell.accessories = accessories
+            )]
         } else {
             cell.accessories = []
         }
 
-        // Highlight selected item
         var bg = UIBackgroundConfiguration.listSidebarCell()
         if item.id == selectedItemId {
             bg.backgroundColor = .tintColor.withAlphaComponent(0.15)
@@ -138,12 +132,14 @@ class SidebarPrimaryViewController: UIViewController {
 
 // MARK: - UICollectionViewDelegate
 
-extension SidebarPrimaryViewController: UICollectionViewDelegate {
+extension SidebarPrimaryViewController {
 
-    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+    override func collectionView(
+        _ collectionView: UICollectionView,
+        didSelectItemAt indexPath: IndexPath
+    ) {
         let item = items[indexPath.item]
         selectedItemId = item.id
-        // Reload to update selection highlight
         applySnapshot()
         onItemSelected?(item)
     }
