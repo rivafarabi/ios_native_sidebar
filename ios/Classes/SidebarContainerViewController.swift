@@ -151,10 +151,25 @@ class SidebarContainerViewController: UISplitViewController {
 
 extension SidebarContainerViewController: UISplitViewControllerDelegate {
 
+    // Fires when the user taps the native sidebar toggle button or swipes to
+    // show/hide the primary column while remaining in regular size class.
+    // This is the primary trigger for sidebar visibility changes on iPad.
+    func splitViewController(
+        _ svc: UISplitViewController,
+        willChangeTo newDisplayMode: UISplitViewController.DisplayMode
+    ) {
+        let isVisible = newDisplayMode != .secondaryOnly
+        onEvent(["type": "sidebarVisibilityChanged", "isVisible": isVisible])
+    }
+
+    // Fires when the size class collapses to compact (e.g. iPhone, or iPad
+    // Slide Over). In collapsed state the primary column is always the root,
+    // so the sidebar is effectively "visible" from a navigation perspective.
     func splitViewControllerDidCollapse(_ svc: UISplitViewController) {
         onEvent(["type": "sidebarVisibilityChanged", "isVisible": true])
     }
 
+    // Fires when the size class expands back to regular after a collapse.
     func splitViewControllerDidExpand(_ svc: UISplitViewController) {
         let isVisible = displayMode != .secondaryOnly
         onEvent(["type": "sidebarVisibilityChanged", "isVisible": isVisible])

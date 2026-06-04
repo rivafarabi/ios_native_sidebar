@@ -79,7 +79,16 @@ public class IosNativeSidebarPlugin: NSObject, FlutterPlugin, FlutterStreamHandl
                 return
             }
 
-            // Store original root VC so we can restore on teardown
+            // If a container already exists (e.g. hot-restart without teardown),
+            // silently restore the original root before re-initialising so we
+            // never set originalRootViewController to a stale split-view.
+            if self.sidebarContainer != nil, let original = self.originalRootViewController {
+                window.rootViewController = original
+                self.sidebarContainer = nil
+                self.originalRootViewController = nil
+            }
+
+            // Snapshot the current root — must be the Flutter VC, not the container.
             self.originalRootViewController = window.rootViewController
 
             let container = SidebarContainerViewController(
@@ -146,17 +155,15 @@ public class IosNativeSidebarPlugin: NSObject, FlutterPlugin, FlutterStreamHandl
 
     private func handleTeardown(result: @escaping FlutterResult) {
         DispatchQueue.main.async { [weak self] in
-            guard let self, let window = self.keyWindow,
-                  let original = self.originalRootViewController else {
-                result(nil)
-                return
+            guard let self else { result(nil); return }
+            if let window = self.keyWindow,
+               let original = self.originalRootViewController {
+                // Swap back synchronously — no animation. Using UIView.transition
+                // here called result(nil) before the animation finished, letting
+                // a hot-reload initialize run mid-animation and capture the split
+                // view (not the Flutter VC) as the new originalRootViewController.
+                window.rootViewController = original
             }
-            UIView.transition(
-                with: window,
-                duration: 0.3,
-                options: .transitionCrossDissolve,
-                animations: { window.rootViewController = original }
-            )
             self.sidebarContainer = nil
             self.originalRootViewController = nil
             result(nil)

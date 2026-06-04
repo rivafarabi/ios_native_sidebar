@@ -77,6 +77,17 @@ class _NativeSidebarState extends State<NativeSidebar> {
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    // Hot reload preserves state but may desync the native sidebar.
+    // Re-send the full configuration without tearing down and re-creating
+    // the split view, which would cause a visible flash.
+    if (Platform.isIOS && _initialized) {
+      _initialize();
+    }
+  }
+
+  @override
   void didUpdateWidget(NativeSidebar old) {
     super.didUpdateWidget(old);
     if (!Platform.isIOS || !_initialized) return;
@@ -133,6 +144,7 @@ class _NativeSidebarState extends State<NativeSidebar> {
       if (widget.title != null) 'title': widget.title,
       'largeTitleDisplayMode': widget.largeTitleDisplayMode,
     });
+
     if (widget.selectedItemId != null) {
       await _channel.invokeMethod('selectItem', {'itemId': widget.selectedItemId});
     }
@@ -146,7 +158,7 @@ class _NativeSidebarState extends State<NativeSidebar> {
   bool _itemsChanged(List<NativeSidebarItem> a, List<NativeSidebarItem> b) {
     if (a.length != b.length) return true;
     for (var i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id || a[i].title != b[i].title || a[i].systemImage != b[i].systemImage || a[i].badge != b[i].badge) return true;
+      if (a[i].id != b[i].id || a[i].title != b[i].title || a[i].sfIcon != b[i].sfIcon || a[i].badge != b[i].badge) return true;
     }
     return false;
   }
@@ -224,8 +236,8 @@ class _FlutterSidebarFallbackState extends State<_FlutterSidebarFallback> {
                 widget.items.map((item) {
                   return NavigationRailDestination(
                     icon:
-                        item.systemImage != null
-                            ? Icon(IconData(_sfSymbolToMaterialCode(item.systemImage!), fontFamily: 'MaterialIcons'))
+                        item.sfIcon != null
+                            ? Icon(IconData(_sfSymbolToMaterialCode(item.sfIcon!), fontFamily: 'MaterialIcons'))
                             : const Icon(Icons.circle_outlined),
                     label: Text(item.title),
                   );
@@ -259,7 +271,7 @@ class _FlutterSidebarFallbackState extends State<_FlutterSidebarFallback> {
           children:
               widget.items.map((item) {
                 return ListTile(
-                  leading: item.systemImage != null ? const Icon(Icons.circle) : null,
+                  leading: item.sfIcon != null ? const Icon(Icons.circle) : null,
                   title: Text(item.title),
                   selected: item.id == widget.selectedItemId,
                   onTap: () {

@@ -13,35 +13,26 @@ class NativeSidebarItem {
 
   /// SF Symbol name (e.g. `'house'`, `'gear'`).
   /// Takes priority over [image] when both are provided.
-  final String? systemImage;
+  final String? sfIcon;
 
   /// Any Flutter [ImageProvider] (asset, network, file, memory).
-  /// Encoded to PNG bytes and sent to native. [systemImage] takes priority.
+  /// Encoded to PNG bytes and sent to native. [sfIcon] takes priority.
   final ImageProvider? image;
 
   /// Optional badge text shown on the trailing edge (e.g. `'3'` or `'New'`).
   final String? badge;
 
-  const NativeSidebarItem({
-    required this.id,
-    required this.title,
-    this.systemImage,
-    this.image,
-    this.badge,
-  });
+  const NativeSidebarItem({required this.id, required this.title, this.sfIcon, this.image, this.badge});
 
   /// Serialises this item for the method channel.
   /// [image] is resolved to PNG bytes before sending.
   Future<Map<String, dynamic>> toMap() async {
-    final map = <String, dynamic>{
-      'id': id,
-      'title': title,
-    };
-    if (systemImage != null) map['systemImage'] = systemImage;
+    final map = <String, dynamic>{'id': id, 'title': title};
+    if (sfIcon != null) map['systemImage'] = sfIcon;
     if (badge != null) map['badge'] = badge;
 
     // Only encode image bytes when no SF Symbol is provided
-    if (systemImage == null && image != null) {
+    if (sfIcon == null && image != null) {
       final bytes = await _resolveImageBytes(image!);
       if (bytes != null) {
         map['imageData'] = bytes;

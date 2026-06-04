@@ -15,10 +15,15 @@ class ExampleApp extends StatelessWidget {
 // ── Demo items ─────────────────────────────────────────────────────────────
 
 final _items = [
-  const NativeSidebarItem(id: 'home', title: 'Home', systemImage: 'house'),
-  const NativeSidebarItem(id: 'explore', title: 'Explore', systemImage: 'safari'),
-  const NativeSidebarItem(id: 'library', title: 'Library', systemImage: 'books.vertical', badge: '3'),
-  const NativeSidebarItem(id: 'settings', title: 'Settings', systemImage: 'gear'),
+  const NativeSidebarItem(id: 'home', title: 'Home', sfIcon: 'house'),
+  const NativeSidebarItem(id: 'explore', title: 'Explore', sfIcon: 'safari'),
+  const NativeSidebarItem(id: 'library', title: 'Library', sfIcon: 'books.vertical', badge: '3'),
+  const NativeSidebarItem(id: 'settings', title: 'Settings', sfIcon: 'gear'),
+  const NativeSidebarItem(
+    id: 'profile',
+    title: 'Profile',
+    image: NetworkImage("https://images.pexels.com/photos/26221500/pexels-photo-26221500.jpeg"),
+  ),
 ];
 
 // ── Demo page ──────────────────────────────────────────────────────────────
@@ -70,8 +75,6 @@ class _DetailContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print(MediaQuery.of(context).padding);
-
     return Scaffold(
       appBar: AppBar(title: Text(_titleFor(selectedId)), backgroundColor: Colors.blueAccent),
       body: AnimatedPadding(

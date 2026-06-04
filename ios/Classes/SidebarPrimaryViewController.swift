@@ -76,10 +76,22 @@ class SidebarPrimaryViewController: UICollectionViewController {
         var content = cell.defaultContentConfiguration()
         content.text = item.title
 
-        if let icon = item.resolvedIcon {
+        if let name = item.systemImage, let icon = UIImage(systemName: name) {
+            // SF Symbol — standard sidebar icon sizing
             content.image = icon
             content.imageProperties.tintColor = .label
             content.imageProperties.maximumSize = CGSize(width: 22, height: 22)
+        } else if let data = item.imageData, let original = UIImage(data: data) {
+            // Custom image — circular avatar, same container size as SF Symbol icons.
+            // reservedLayoutSize ensures the image column reserves the same fixed
+            // width as SF Symbol rows so text labels align across all cells.
+            let avatarSize: CGFloat = 30
+            content.image = makeCircularAvatar(from: original, size: avatarSize)
+            content.imageProperties.maximumSize = CGSize(width: avatarSize, height: avatarSize)
+            content.imageProperties.reservedLayoutSize = CGSize(
+                width: UIListContentConfiguration.ImageProperties.standardDimension,
+                height: UIListContentConfiguration.ImageProperties.standardDimension
+            )
         }
 
         cell.contentConfiguration = content
@@ -102,6 +114,43 @@ class SidebarPrimaryViewController: UICollectionViewController {
             bg.cornerRadius = 10
         }
         cell.backgroundConfiguration = bg
+    }
+
+    // MARK: - Avatar Rendering
+
+    /// Renders `image` into a circle of `size` × `size` points using
+    /// aspect-fit (contain) mode: the image shrinks to fit inside the circle
+    /// without cropping, and any remaining area is filled with a neutral
+    /// background so the circle boundary is always complete.
+    private func makeCircularAvatar(from image: UIImage, size: CGFloat) -> UIImage {
+        let canvas = CGSize(width: size, height: size)
+        let renderer = UIGraphicsImageRenderer(size: canvas)
+        return renderer.image { ctx in
+            let circle = CGRect(origin: .zero, size: canvas)
+
+            // Clip everything to the circle boundary
+            ctx.cgContext.addEllipse(in: circle)
+            ctx.cgContext.clip()
+
+            // Neutral background visible where contain-fit leaves gaps
+            UIColor.systemGray5.setFill()
+            ctx.cgContext.fill(circle)
+
+            // Cover (aspect-fill): scale so the shortest dimension fills the
+            // circle; the excess on the longer axis is centred and clipped.
+            let aspect = image.size.width / image.size.height
+            let drawRect: CGRect
+            if aspect >= 1.0 {
+                // Wider than tall — fill by height, clip width overflow
+                let w = size * aspect
+                drawRect = CGRect(x: (size - w) / 2, y: 0, width: w, height: size)
+            } else {
+                // Taller than wide — fill by width, clip height overflow
+                let h = size / aspect
+                drawRect = CGRect(x: 0, y: (size - h) / 2, width: size, height: h)
+            }
+            image.draw(in: drawRect)
+        }
     }
 
     // MARK: - Snapshot
